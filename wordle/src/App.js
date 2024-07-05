@@ -1,37 +1,72 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useReducer } from 'react';
 import './App.css';
 import getWordleWords from './utils/getWordleWords';
 
 const MAX_GUESS = 6;
 const MAX_CHARS = 5;
 
+function reducer(state, action) {
+  const { guesses, currentGuess, currentGuessIndex } = state;
+  const { type, value } = action;
+
+  switch (type) {
+    case 'initSolution':
+      return { ...state, solution: value };
+    case 'addToGuesses':
+      const cloneGuesses = [...guesses];
+      cloneGuesses[currentGuessIndex] = currentGuess;
+      return {
+        ...state,
+        guesses: cloneGuesses,
+        currentGuess: '',
+        currentGuessIndex: currentGuessIndex + 1,
+      };
+    case 'removeFromCurrentGuess':
+      return { ...state, currentGuess: currentGuess.slice(0, -1) };
+    case 'addToCurrentGuess':
+      return { ...state, currentGuess: currentGuess + value };
+    default:
+      throw new Error('Unknown action type');
+  }
+}
+
 export default function App() {
-  const [solution, setSolution] = useState(null);
-  const [guesses, setGuesses] = useState(new Array(MAX_GUESS).fill(null));
-  const [currentGuess, setCurrentGuess] = useState('');
-  const [currentGuessIndex, setCurrentGuessIndex] = useState(0);
+  const [state, dispatch] = useReducer(reducer, {
+    solution: null,
+    guesses: new Array(MAX_GUESS).fill(null),
+    currentGuess: '',
+    currentGuessIndex: 0,
+  });
 
   useEffect(() => {
     getWordleWords().then((words) => {
       const randomIndex = Math.floor(Math.random() * words.length);
-      setSolution(words[randomIndex].toLowerCase());
+      dispatch({
+        type: 'initSolution',
+        value: words[randomIndex].toLowerCase(),
+      });
+      console.log(words[randomIndex].toLowerCase());
     });
   }, []);
 
   useEffect(() => {
+    const { solution, guesses, currentGuess } = state;
+
     const handleKeyDown = ({ key }) => {
       if (guesses.includes(solution) || guesses[MAX_GUESS - 1] != null) return;
 
       if (key === 'Enter' && currentGuess.length === MAX_CHARS) {
-        const cloneGuesses = [...guesses];
-        cloneGuesses[currentGuessIndex] = currentGuess;
-        setGuesses(cloneGuesses);
-        setCurrentGuess('');
-        setCurrentGuessIndex((prevIndex) => prevIndex + 1);
+        dispatch({
+          type: 'addToGuesses',
+          value: null,
+        });
       }
 
       if (key === 'Backspace' && currentGuess.length !== 0) {
-        setCurrentGuess((prevGuess) => prevGuess.slice(0, -1));
+        dispatch({
+          type: 'removeFromCurrentGuess',
+          value: null,
+        });
       }
 
       if (
@@ -39,32 +74,35 @@ export default function App() {
         key.match(/[a-z]/) &&
         currentGuess.length !== MAX_CHARS
       ) {
-        setCurrentGuess((prevGuess) => prevGuess + key);
+        dispatch({
+          type: 'addToCurrentGuess',
+          value: key,
+        });
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [guesses, currentGuess, currentGuessIndex, solution]);
+  }, [state]);
 
-  if (solution == null) return null;
+  if (state.solution == null) return null;
 
   return (
     <div className="board">
-      {guesses.map((guess, lineIndex) => {
-        const isFinal = currentGuessIndex > lineIndex;
+      {state.guesses.map((guess, lineIndex) => {
+        const isFinal = state.currentGuessIndex > lineIndex;
         return (
           <GuessLine
             key={lineIndex}
-            guess={(lineIndex === currentGuessIndex
-              ? currentGuess
+            guess={(lineIndex === state.currentGuessIndex
+              ? state.currentGuess
               : guess ?? ''
             )
               .padEnd(MAX_CHARS)
               .split('')}
-            currentGuess={currentGuess}
-            solution={solution}
+            currentGuess={state.currentGuess}
+            solution={state.solution}
             isFinal={isFinal}
             maxChars={MAX_CHARS}
           />
@@ -80,13 +118,11 @@ function GuessLine({ guess, isFinal, solution }) {
     if (isFinal) {
       if (solution[index] === char) {
         classes += ' correct';
-      }
-
-      if (solution.includes(char)) {
+      } else if (solution.includes(char)) {
         classes += ' close';
+      } else {
+        classes += ' incorrect';
       }
-
-      classes += ' incorrect';
     }
 
     return classes;
